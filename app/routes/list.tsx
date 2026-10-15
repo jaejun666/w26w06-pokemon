@@ -1,71 +1,59 @@
-import { useEffect, useState } from "react"
+// import { useEffect, useState } from "react"
 import axios from "axios"
-import { Link } from "react-router"
-import type { Route } from "./+types/detail"
+import { Link, useLoaderData } from "react-router"
+import type { Route } from "./+types/list"
+
+export function meta({}: Route.MetaArgs) {
+  return [
+    { title: "포켓몬" },
+    { name: "description", content: "포켓몬 도감" },
+  ]
+}
 
 type Pokemon = {
   id: number
   name: string
-  types: { name: string }[]
   image: string
 }
 
-export default function Detail({ params }: Route.ComponentProps) {
-  const [pokemon, setPokemon] = useState<Pokemon | null>(null)
-  const [loading, setLoading] = useState(true)
+export async function clientLoader({ request }: Route.ClientLoaderArgs) {
+  const response = await axios.get("https://pokeapi.co/api/v2/pokemon?limit=100")
+  const results = response.data.results
 
-  useEffect(() => {
-    async function fetchPokemon() {
-      try {
-        const response = await axios.get(`https://pokeapi.co/api/v2/pokemon/${params.id}`)
-        const { id, name, sprites } = response.data
-
-        setPokemon({
-          id,
-          name,
-          types: response.data.types,
-          image: sprites.other["official-artwork"].front_default,
-        })
-      } catch (error) {
-        console.error("포켓몬 데이터 에러: ", error)
-      } finally {
-        setLoading(false)
+  const pokemonData: Pokemon[] = await Promise.all(
+    results.map(async ({ url }: { url: string }) => {
+      const pokemonResponse = await axios.get(url)
+      const { id, name, sprites } = pokemonResponse.data
+      return {
+        id,
+        name,
+        image: sprites.other["official-artwork"].front_default,
       }
-    }
+    })
+  )
 
-    fetchPokemon()
-  }, [params.id])
+  return pokemonData
+}
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-slate-50 p-6 flex items-center justify-center text-xl font-semibold text-slate-900 animate-pulse">
-        로딩 중...
-      </div>
-    )
-  }
+export default function List() {
+  const pokemons = useLoaderData<typeof clientLoader>()
 
-  if (!pokemon) {
-    return (
-      <div className="min-h-screen bg-slate-50 p-6 flex items-center justify-center text-xl font-semibold text-slate-900">
-        포켓몬을 찾을 수 없습니다.
-      </div>
-    )
-  }
-  
   return (
     <div className="min-h-screen bg-slate-50 p-6">
-      <Link 
-        to="/" 
-        className="mb-3 block mx-auto w-max px-6 py-2 bg-slate-400 hover:bg-slate-700 text-white text-sm rounded-lg">
-        목록으로 돌아가기
-      </Link>
-      <div className="bg-white rounded-xl shadow p-8 max-w-md mx-auto
-                      text-center flex flex-col items-center gap-4">
-        <img src={pokemon.image} alt={pokemon.name} className="w-32 h-32" />
-        <h1 className="text-3xl font-bold text-slate-800">{pokemon.name}</h1>
-        <span className="text-xs bg-yellow-100 text-yellow-700 px-3 py-1 rounded-full">
-          No. {pokemon.id}
-        </span>
+      <h1 className="text-2xl font-bold mb-6 text-slate-800">포켓몬 목록</h1>
+
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
+        {pokemons.map((pokemon) => (
+          <Link 
+            to={`detail/${pokemon.id}`}
+            className="bg-white rounded-xl shadow hover:shadow-md transition
+                      p-4 flex flex-col items-center gap-2
+                      border border-slate-200 hover:border-yellow-400"
+            key={pokemon.id}>
+            <img className="w-24 h-24" src={pokemon.image} alt={pokemon.name} />
+            <p className="font-semibold text-slate-700">{pokemon.name}</p>
+          </Link>
+        ))}
       </div>
     </div>
   )
